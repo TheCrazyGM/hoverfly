@@ -1,4 +1,4 @@
-module github.com/thecrazygm/hoverfly
+module github.com/srbde/hoverfly
 
 go 1.26.3
 

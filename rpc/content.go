@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/thecrazygm/hoverfly/state"
+	"github.com/srbde/hoverfly/state"
 )
 
 type CommentRef struct {

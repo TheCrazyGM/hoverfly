@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/thecrazygm/hoverfly/state"
+	"github.com/srbde/hoverfly/state"
 )
 
 func TestRPCHandlers(t *testing.T) {

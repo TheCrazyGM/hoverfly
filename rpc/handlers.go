@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/log"
-	"github.com/thecrazygm/hoverfly/state"
+	"github.com/srbde/hoverfly/state"
 )
 
 type jsonRPCRequest struct {

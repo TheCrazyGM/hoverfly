@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/thecrazygm/hoverfly/state"
+	"github.com/srbde/hoverfly/state"
 )
 
 func (h *RPCHandler) handleGetBlock(params json.RawMessage, method string) (any, *rpcError) {

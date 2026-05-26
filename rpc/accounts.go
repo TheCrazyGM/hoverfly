@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/thecrazygm/hoverfly/state"
+	"github.com/srbde/hoverfly/state"
 )
 
 func (h *RPCHandler) handleGetAccounts(params json.RawMessage) (any, *rpcError) {
