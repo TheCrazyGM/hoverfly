@@ -8,7 +8,7 @@ If you are developing or testing Hive applications, bots, SDKs, or scripts, Hove
 
 ---
 
-**Mock-First and Stateful:** Hoverfly is written in Go, powered by a high-performance **BadgerDB** state engine, and currently provides developer-useful first-class responses for **215/215 Hive OpenAPI JSON-RPC methods**.
+**Mock-First and Stateful:** Hoverfly is written in Go, powered by a high-performance **BadgerDB** state engine, and currently provides developer-useful first-class responses for **220/220 Hive OpenAPI JSON-RPC methods**.
 
 ---
 
@@ -20,7 +20,7 @@ The Hive ecosystem deserves testing infrastructure that is fast, local, and reli
 
 Hoverfly tracks the live Hive OpenAPI method surface and routes every known method through a first-class mock handler:
 
-- **215/215 OpenAPI Methods Routed**: `condenser_api`, `database_api`, `account_history_api`, `bridge`, `wallet_bridge_api`, `rc_api`, `market_history_api`, `debug_node_api`, and related API groups all answer locally.
+- **220/220 OpenAPI Methods Routed**: `condenser_api`, `database_api`, `account_history_api`, `bridge`, `wallet_bridge_api`, `rc_api`, `market_history_api`, `debug_node_api`, and related API groups all answer locally.
 - **No Unrouted Fallbacks Required**: The generic OpenAPI example layer exists as a safety net, but current documented coverage is first-class and developer-useful.
 - **Bridge/Hivemind Shapes Included**: Posts, profiles, discussions, communities, ranked posts, notification counts, and relationship/list endpoints return realistic local shapes instead of only echoing docs examples.
 
@@ -128,7 +128,7 @@ By default, Hoverfly binds to port `8090` (matching default Hive nodes). Change 
 
 ## 📡 API Coverage
 
-Hoverfly currently provides developer-useful first-class mocks for **215/215** Hive OpenAPI JSON-RPC methods.
+Hoverfly currently provides developer-useful first-class mocks for **220/220** Hive OpenAPI JSON-RPC methods.
 
 | Area                   | Coverage | Notes                                              |
 | ---------------------- | -------- | -------------------------------------------------- |
@@ -255,6 +255,25 @@ go fmt ./...
 # Compile release binary
 go build -ldflags="-s -w" -o hoverfly main.go
 ```
+
+---
+
+## 🧪 API Validation & Smoke Testing
+
+Hoverfly comes with an automated integration and compliance test suite under the [tools/](tools) directory. It executes 289 real-world JSON-RPC queries fetched directly from the official Hive Developer Portal examples to verify mock correctness.
+
+To run the integration tests:
+
+```bash
+# 1. Start Hoverfly in one terminal
+./hoverfly
+
+# 2. Run the test suite in another terminal using uv
+cd tools
+uv run test_hoverfly.py
+```
+
+You can also run tests in parallel to load-test or stress-test the server using the `--parallel <workers>` option. See [tools/README.md](tools/README.md) for details.
 
 ---
 
