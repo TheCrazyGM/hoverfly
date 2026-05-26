@@ -16,6 +16,7 @@ func main() {
 	dbPath := flag.String("db", "", "path to BadgerDB directory (default is in-memory ephemeral)")
 	reset := flag.Bool("reset", false, "reset/wipe the database directory on startup")
 	debug := flag.Bool("debug", false, "enable verbose debug logging (logs every RPC call)")
+	strict := flag.Bool("strict", false, "run server in strict mode (verifies state and disables fallbacks)")
 	flag.Parse()
 
 	fmt.Println("=====================================================")
@@ -43,7 +44,25 @@ func main() {
 		log.Info("Logging: Debug Mode Enabled (Verbose RPC logs)")
 	}
 
-	// 2. Start Background Block Ticker (simulate block generation every 3 seconds)
+	// 2. Print Seeded Accounts & Rotating Key Pairs
+	fmt.Println("🔑 Seeded Accounts & Rotating Key Pairs:")
+	if alice, err := s.GetAccount("alice"); err == nil && alice != nil {
+		fmt.Printf("  👤 @%s\n", alice.Name)
+		fmt.Printf("     🔑 Active  - Pub: %s\n", alice.ActiveKey)
+		fmt.Printf("                - WIF: %s\n", alice.ActivePrivateKey)
+		fmt.Printf("     🔑 Posting - Pub: %s\n", alice.PostingKey)
+		fmt.Printf("                - WIF: %s\n", alice.PostingPrivateKey)
+	}
+	if bob, err := s.GetAccount("bob"); err == nil && bob != nil {
+		fmt.Printf("  👤 @%s\n", bob.Name)
+		fmt.Printf("     🔑 Active  - Pub: %s\n", bob.ActiveKey)
+		fmt.Printf("                - WIF: %s\n", bob.ActivePrivateKey)
+		fmt.Printf("     🔑 Posting - Pub: %s\n", bob.PostingKey)
+		fmt.Printf("                - WIF: %s\n", bob.PostingPrivateKey)
+	}
+	fmt.Println("=====================================================")
+
+	// 3. Start Background Block Ticker (simulate block generation every 3 seconds)
 	go func() {
 		ticker := time.NewTicker(3 * time.Second)
 		for range ticker.C {
@@ -59,8 +78,8 @@ func main() {
 	}()
 	log.Info("Block Generator: Active (producing mock blocks every 3s)")
 
-	// 3. Set up JSON-RPC Handler
-	handler := rpc.NewRPCHandler(s, *debug)
+	// 4. Set up JSON-RPC Handler
+	handler := rpc.NewRPCHandler(s, *debug, *strict)
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {

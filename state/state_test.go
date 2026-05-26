@@ -13,21 +13,24 @@ func TestStateDefaults(t *testing.T) {
 	defer s.Close()
 
 	// Check default seeded account
-	acc, err := s.GetAccount("thecrazygm")
+	acc, err := s.GetAccount("alice")
 	if err != nil {
-		t.Fatalf("failed to get account thecrazygm: %v", err)
+		t.Fatalf("failed to get account alice: %v", err)
 	}
-	if acc.Name != "thecrazygm" {
-		t.Errorf("expected account name 'thecrazygm', got '%s'", acc.Name)
+	if acc.Name != "alice" {
+		t.Errorf("expected account name 'alice', got '%s'", acc.Name)
 	}
 
 	// Check key references
-	refs, err := s.GetKeyReferences([]string{"STM5kQ1uy2CGNSwibSeYyLELWFng3HTyYVSsQd4Bjd4sWfqgKgtgJ"})
+	if acc.ActiveKey == "" {
+		t.Fatalf("expected alice to have an ActiveKey")
+	}
+	refs, err := s.GetKeyReferences([]string{acc.ActiveKey})
 	if err != nil {
 		t.Fatalf("failed to get key references: %v", err)
 	}
-	if len(refs) != 1 || refs[0] != "thecrazygm" {
-		t.Errorf("expected key reference 'thecrazygm', got %v", refs)
+	if len(refs) != 1 || refs[0] != "alice" {
+		t.Errorf("expected key reference 'alice', got %v", refs)
 	}
 
 	// Check dynamic global properties

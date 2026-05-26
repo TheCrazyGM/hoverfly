@@ -35,13 +35,15 @@ type rpcMethodFunc func(json.RawMessage) (any, *rpcError)
 type RPCHandler struct {
 	state  *state.State
 	debug  bool
+	strict bool
 	routes map[string]rpcMethodFunc
 }
 
-func NewRPCHandler(s *state.State, debug bool) *RPCHandler {
+func NewRPCHandler(s *state.State, debug bool, strict bool) *RPCHandler {
 	h := &RPCHandler{
 		state:  s,
 		debug:  debug,
+		strict: strict,
 		routes: make(map[string]rpcMethodFunc),
 	}
 	h.initRoutes()
@@ -165,9 +167,15 @@ func (h *RPCHandler) initRoutes() {
 	h.routes["database_api.get_block"] = func(p json.RawMessage) (any, *rpcError) { return h.handleGetBlock(p, "database_api.get_block") }
 	h.routes["block_api.get_block"] = func(p json.RawMessage) (any, *rpcError) { return h.handleGetBlock(p, "block_api.get_block") }
 
-	h.routes["condenser_api.get_block_header"] = func(p json.RawMessage) (any, *rpcError) { return h.handleGetBlockHeader(p, "condenser_api.get_block_header") }
-	h.routes["database_api.get_block_header"] = func(p json.RawMessage) (any, *rpcError) { return h.handleGetBlockHeader(p, "database_api.get_block_header") }
-	h.routes["block_api.get_block_header"] = func(p json.RawMessage) (any, *rpcError) { return h.handleGetBlockHeader(p, "block_api.get_block_header") }
+	h.routes["condenser_api.get_block_header"] = func(p json.RawMessage) (any, *rpcError) {
+		return h.handleGetBlockHeader(p, "condenser_api.get_block_header")
+	}
+	h.routes["database_api.get_block_header"] = func(p json.RawMessage) (any, *rpcError) {
+		return h.handleGetBlockHeader(p, "database_api.get_block_header")
+	}
+	h.routes["block_api.get_block_header"] = func(p json.RawMessage) (any, *rpcError) {
+		return h.handleGetBlockHeader(p, "block_api.get_block_header")
+	}
 
 	h.routes["block_api.get_block_range"] = h.handleGetBlockRange
 	h.routes["condenser_api.get_ops_in_block"] = h.handleCondenserGetOpsInBlock
@@ -179,16 +187,24 @@ func (h *RPCHandler) initRoutes() {
 	h.routes["condenser_api.get_transaction"] = h.handleGetTransaction
 	h.routes["account_history_api.get_transaction"] = h.handleGetTransaction
 
-	h.routes["condenser_api.is_known_transaction"] = func(p json.RawMessage) (any, *rpcError) { return h.handleIsKnownTransaction("condenser_api.is_known_transaction", p) }
-	h.routes["database_api.is_known_transaction"] = func(p json.RawMessage) (any, *rpcError) { return h.handleIsKnownTransaction("database_api.is_known_transaction", p) }
+	h.routes["condenser_api.is_known_transaction"] = func(p json.RawMessage) (any, *rpcError) {
+		return h.handleIsKnownTransaction("condenser_api.is_known_transaction", p)
+	}
+	h.routes["database_api.is_known_transaction"] = func(p json.RawMessage) (any, *rpcError) {
+		return h.handleIsKnownTransaction("database_api.is_known_transaction", p)
+	}
 
 	h.routes["transaction_status_api.find_transaction"] = h.handleFindTransaction
 	h.routes["jsonrpc.get_methods"] = func(_ json.RawMessage) (any, *rpcError) { return h.handleGetMethods() }
 	h.routes["jsonrpc.get_signature"] = h.handleGetSignature
 	h.routes["hive.get_info"] = func(_ json.RawMessage) (any, *rpcError) { return h.handleHiveInfo() }
 
-	h.routes["account_history_api.get_account_history"] = func(p json.RawMessage) (any, *rpcError) { return h.handleGetAccountHistory("account_history_api.get_account_history", p) }
-	h.routes["condenser_api.get_account_history"] = func(p json.RawMessage) (any, *rpcError) { return h.handleGetAccountHistory("condenser_api.get_account_history", p) }
+	h.routes["account_history_api.get_account_history"] = func(p json.RawMessage) (any, *rpcError) {
+		return h.handleGetAccountHistory("account_history_api.get_account_history", p)
+	}
+	h.routes["condenser_api.get_account_history"] = func(p json.RawMessage) (any, *rpcError) {
+		return h.handleGetAccountHistory("condenser_api.get_account_history", p)
+	}
 
 	// Broadcast & Hex & Signatures
 	broadcastFunc := h.handleBroadcastTransaction
@@ -197,19 +213,39 @@ func (h *RPCHandler) initRoutes() {
 	h.routes["network_broadcast_api.broadcast_transaction"] = broadcastFunc
 	h.routes["network_broadcast_api.broadcast_transaction_synchronous"] = broadcastFunc
 
-	h.routes["condenser_api.get_transaction_hex"] = func(p json.RawMessage) (any, *rpcError) { return h.handleGetTransactionHex("condenser_api.get_transaction_hex", p) }
-	h.routes["database_api.get_transaction_hex"] = func(p json.RawMessage) (any, *rpcError) { return h.handleGetTransactionHex("database_api.get_transaction_hex", p) }
+	h.routes["condenser_api.get_transaction_hex"] = func(p json.RawMessage) (any, *rpcError) {
+		return h.handleGetTransactionHex("condenser_api.get_transaction_hex", p)
+	}
+	h.routes["database_api.get_transaction_hex"] = func(p json.RawMessage) (any, *rpcError) {
+		return h.handleGetTransactionHex("database_api.get_transaction_hex", p)
+	}
 
-	h.routes["condenser_api.get_potential_signatures"] = func(p json.RawMessage) (any, *rpcError) { return h.handlePotentialSignatures("condenser_api.get_potential_signatures", p) }
-	h.routes["database_api.get_potential_signatures"] = func(p json.RawMessage) (any, *rpcError) { return h.handlePotentialSignatures("database_api.get_potential_signatures", p) }
+	h.routes["condenser_api.get_potential_signatures"] = func(p json.RawMessage) (any, *rpcError) {
+		return h.handlePotentialSignatures("condenser_api.get_potential_signatures", p)
+	}
+	h.routes["database_api.get_potential_signatures"] = func(p json.RawMessage) (any, *rpcError) {
+		return h.handlePotentialSignatures("database_api.get_potential_signatures", p)
+	}
 
-	h.routes["condenser_api.get_required_signatures"] = func(p json.RawMessage) (any, *rpcError) { return h.handleRequiredSignatures("condenser_api.get_required_signatures", p) }
-	h.routes["database_api.get_required_signatures"] = func(p json.RawMessage) (any, *rpcError) { return h.handleRequiredSignatures("database_api.get_required_signatures", p) }
+	h.routes["condenser_api.get_required_signatures"] = func(p json.RawMessage) (any, *rpcError) {
+		return h.handleRequiredSignatures("condenser_api.get_required_signatures", p)
+	}
+	h.routes["database_api.get_required_signatures"] = func(p json.RawMessage) (any, *rpcError) {
+		return h.handleRequiredSignatures("database_api.get_required_signatures", p)
+	}
 
-	h.routes["condenser_api.verify_authority"] = func(p json.RawMessage) (any, *rpcError) { return h.handleVerifyAuthority("condenser_api.verify_authority", p) }
-	h.routes["database_api.verify_authority"] = func(p json.RawMessage) (any, *rpcError) { return h.handleVerifyAuthority("database_api.verify_authority", p) }
-	h.routes["database_api.verify_account_authority"] = func(p json.RawMessage) (any, *rpcError) { return h.handleVerifyAuthority("database_api.verify_account_authority", p) }
-	h.routes["database_api.verify_signatures"] = func(p json.RawMessage) (any, *rpcError) { return h.handleVerifyAuthority("database_api.verify_signatures", p) }
+	h.routes["condenser_api.verify_authority"] = func(p json.RawMessage) (any, *rpcError) {
+		return h.handleVerifyAuthority("condenser_api.verify_authority", p)
+	}
+	h.routes["database_api.verify_authority"] = func(p json.RawMessage) (any, *rpcError) {
+		return h.handleVerifyAuthority("database_api.verify_authority", p)
+	}
+	h.routes["database_api.verify_account_authority"] = func(p json.RawMessage) (any, *rpcError) {
+		return h.handleVerifyAuthority("database_api.verify_account_authority", p)
+	}
+	h.routes["database_api.verify_signatures"] = func(p json.RawMessage) (any, *rpcError) {
+		return h.handleVerifyAuthority("database_api.verify_signatures", p)
+	}
 
 	// Debug Node
 	h.routes["debug_node_api.debug_get_head_block"] = func(_ json.RawMessage) (any, *rpcError) { return h.handleDebugHeadBlock() }
@@ -217,7 +253,9 @@ func (h *RPCHandler) initRoutes() {
 	h.routes["debug_node_api.debug_generate_blocks_until"] = h.handleDebugGenerateBlocksUntil
 	h.routes["hive.db_head_state"] = func(_ json.RawMessage) (any, *rpcError) { return h.handleDBHeadState() }
 
-	h.routes["debug_node_api.debug_get_json_schema"] = func(p json.RawMessage) (any, *rpcError) { return h.handleOpenAPIExample("debug_node_api.debug_get_json_schema") }
+	h.routes["debug_node_api.debug_get_json_schema"] = func(p json.RawMessage) (any, *rpcError) {
+		return h.handleOpenAPIExample("debug_node_api.debug_get_json_schema")
+	}
 	h.routes["debug_node_api.debug_has_hardfork"] = func(_ json.RawMessage) (any, *rpcError) { return true, nil }
 	okTrueResponse := func(_ json.RawMessage) (any, *rpcError) { return map[string]any{"ok": true}, nil }
 	h.routes["debug_node_api.debug_set_hardfork"] = okTrueResponse
@@ -230,11 +268,17 @@ func (h *RPCHandler) initRoutes() {
 	h.routes["condenser_api.find_rc_accounts"] = h.handleFindRCAccounts
 	h.routes["rc_api.find_rc_accounts"] = h.handleFindRCAccounts
 
-	h.routes["condenser_api.list_rc_accounts"] = func(p json.RawMessage) (any, *rpcError) { return h.handleListRCAccounts("condenser_api.list_rc_accounts", p) }
+	h.routes["condenser_api.list_rc_accounts"] = func(p json.RawMessage) (any, *rpcError) {
+		return h.handleListRCAccounts("condenser_api.list_rc_accounts", p)
+	}
 	h.routes["rc_api.list_rc_accounts"] = func(p json.RawMessage) (any, *rpcError) { return h.handleListRCAccounts("rc_api.list_rc_accounts", p) }
 
-	h.routes["condenser_api.list_rc_direct_delegations"] = func(_ json.RawMessage) (any, *rpcError) { return h.handleListRCDirectDelegations("condenser_api.list_rc_direct_delegations") }
-	h.routes["rc_api.list_rc_direct_delegations"] = func(_ json.RawMessage) (any, *rpcError) { return h.handleListRCDirectDelegations("rc_api.list_rc_direct_delegations") }
+	h.routes["condenser_api.list_rc_direct_delegations"] = func(_ json.RawMessage) (any, *rpcError) {
+		return h.handleListRCDirectDelegations("condenser_api.list_rc_direct_delegations")
+	}
+	h.routes["rc_api.list_rc_direct_delegations"] = func(_ json.RawMessage) (any, *rpcError) {
+		return h.handleListRCDirectDelegations("rc_api.list_rc_direct_delegations")
+	}
 
 	rcStatsFunc := func(m string) rpcMethodFunc {
 		return func(_ json.RawMessage) (any, *rpcError) { return h.handleOpenAPIExample(m) }
@@ -268,8 +312,12 @@ func (h *RPCHandler) initRoutes() {
 	h.routes["condenser_api.list_proposals"] = func(_ json.RawMessage) (any, *rpcError) { return h.handleProposalList("condenser_api.list_proposals") }
 	h.routes["database_api.list_proposals"] = func(_ json.RawMessage) (any, *rpcError) { return h.handleProposalList("database_api.list_proposals") }
 
-	h.routes["condenser_api.list_proposal_votes"] = func(_ json.RawMessage) (any, *rpcError) { return h.handleProposalVoteList("condenser_api.list_proposal_votes") }
-	h.routes["database_api.list_proposal_votes"] = func(_ json.RawMessage) (any, *rpcError) { return h.handleProposalVoteList("database_api.list_proposal_votes") }
+	h.routes["condenser_api.list_proposal_votes"] = func(_ json.RawMessage) (any, *rpcError) {
+		return h.handleProposalVoteList("condenser_api.list_proposal_votes")
+	}
+	h.routes["database_api.list_proposal_votes"] = func(_ json.RawMessage) (any, *rpcError) {
+		return h.handleProposalVoteList("database_api.list_proposal_votes")
+	}
 
 	h.routes["database_api.list_witness_votes"] = func(_ json.RawMessage) (any, *rpcError) { return map[string]any{"votes": []any{}}, nil }
 
@@ -409,10 +457,22 @@ type EnrichedAccountData struct {
 }
 
 func enrichAccount(acc state.AccountData) EnrichedAccountData {
-	activeKey := "STM5kQ1uy2CGNSwibSeYyLELWFng3HTyYVSsQd4Bjd4sWfqgKgtgJ"
-	postingKey := "STM8Ep2rQp1wPzBPE2tS7tfcvU2JpbnkeyhfsYB1Jcnz7S2w8H9Q3"
-	ownerKey := "STM5kQ1uy2CGNSwibSeYyLELWFng3HTyYVSsQd4Bjd4sWfqgKgtgJ"
-	memoKey := "STM5kQ1uy2CGNSwibSeYyLELWFng3HTyYVSsQd4Bjd4sWfqgKgtgJ"
+	activeKey := acc.ActiveKey
+	if activeKey == "" {
+		activeKey = "STM5kQ1uy2CGNSwibSeYyLELWFng3HTyYVSsQd4Bjd4sWfqgKgtgJ"
+	}
+	postingKey := acc.PostingKey
+	if postingKey == "" {
+		postingKey = "STM8Ep2rQp1wPzBPE2tS7tfcvU2JpbnkeyhfsYB1Jcnz7S2w8H9Q3"
+	}
+	ownerKey := acc.OwnerKey
+	if ownerKey == "" {
+		ownerKey = "STM5kQ1uy2CGNSwibSeYyLELWFng3HTyYVSsQd4Bjd4sWfqgKgtgJ"
+	}
+	memoKey := acc.MemoKey
+	if memoKey == "" {
+		memoKey = "STM5kQ1uy2CGNSwibSeYyLELWFng3HTyYVSsQd4Bjd4sWfqgKgtgJ"
+	}
 
 	savingsBalance := acc.SavingsBalance
 	if savingsBalance == "" {

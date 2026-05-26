@@ -46,7 +46,7 @@ Powered by BadgerDB (v4), Hoverfly provides structured, transactional storage fo
 
 Hoverfly is designed for "does my app work?" testing:
 
-- **Seeded Accounts**: `@thecrazygm`, `@alice`, and `@bob` exist out of the box.
+- **Seeded Accounts**: `@alice` and `@bob` exist out of the box with dynamically generated key pairs.
 - **Local Blocks**: A background ticker simulates real block production every 3 seconds.
 - **Useful Empty State**: APIs for escrows, delegations, orders, conversions, subscriptions, and notifications return stable empty local state when no matching data exists.
 - **Debug Helpers**: `debug_node_api` methods can advance blocks and inspect local head state without a live node.
@@ -74,8 +74,8 @@ Requires Go >= 1.20.
 Clone the repository and build:
 
 ```bash
-git clone https://github.com/TheCrazyGM/libraries
-cd libraries/hoverfly
+git clone https://github.com/srbde/hoverfly
+cd hoverfly
 go build -o hoverfly main.go
 ```
 
@@ -123,6 +123,7 @@ By default, Hoverfly binds to port `8090` (matching default Hive nodes). Change 
 | `--db`    | `string` | `""`    | Directory path to BadgerDB. If empty, runs in-memory.   |
 | `--reset` | `bool`   | `false` | If true, deletes the BadgerDB directory before booting. |
 | `--debug` | `bool`   | `false` | Enables verbose request and state-change logging.       |
+| `--strict`| `bool`   | `false` | Runs server in strict mode, validating transaction state.|
 
 ---
 
@@ -169,14 +170,14 @@ func main() {
 
 	// Append transfer
 	tx.AppendOp(&transaction.Transfer{
-		From:   "thecrazygm",
-		To:     "alice",
+		From:   "alice",
+		To:     "bob",
 		Amount: "10.000 HIVE",
 		Memo:   "Testing locally with Hoverfly 🛸",
 	})
 
-	// Sign and broadcast using standard test/active WIF
-	wif := "5KQwrPbwdL6PhUMCYFZd4C29VJpqZLfL96AUtDQm2h5pt8E6bCS"
+	// Sign and broadcast using the active WIF key printed on startup
+	wif := "<ALICE_ACTIVE_WIF_FROM_STARTUP>"
 	if err := tx.Sign(wif); err != nil {
 		log.Fatalf("failed to sign: %v", err)
 	}
@@ -211,13 +212,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut tx = Transaction::new(ref_block_num, ref_block_prefix, expiration);
 
     tx.append_op(Box::new(Transfer {
-        from: "thecrazygm".to_string(),
-        to: "alice".to_string(),
+        from: "alice".to_string(),
+        to: "bob".to_string(),
         amount: "10.000 HIVE".to_string(),
         memo: "Testing locally with Hoverfly 🛸".to_string(),
     }));
 
-    let active_wif = "5KQwrPbwdL6PhUMCYFZd4C29VJpqZLfL96AUtDQm2h5pt8E6bCS";
+    let active_wif = "<ALICE_ACTIVE_WIF_FROM_STARTUP>";
     let chain_id = "beeab0de00000000000000000000000000000000000000000000000000000000";
     tx.sign(active_wif, chain_id)?;
 
@@ -232,12 +233,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## 🧪 Seeding & Mock Defaults
 
-When Hoverfly boots, it pre-seeds the following test entities so standard SDK examples run out of the box:
+When Hoverfly boots, it pre-seeds the following test entities:
 
-- **Mock Accounts**: `@thecrazygm` (seeded with `1000.000 HIVE` and `500.000 HBD`), `@alice`, and `@bob`.
-- **Active Key Registry**: Maps `@thecrazygm`'s active public key (`STM5kQ1uy2CGNSwibSeYyLELWFng3HTyYVSsQd4Bjd4sWfqgKgtgJ`) so key reference lookups (`get_key_references`) resolve successfully.
+- **Mock Accounts**: `@alice` (seeded with `500.000 HIVE` and `100.000 HBD`) and `@bob` (seeded with `250.000 HIVE` and `50.000 HBD`).
+- **Rotating Key Pairs**: Active and posting key pairs are dynamically generated for `@alice` and `@bob` on startup (using `anther`'s cryptographic utility package) and printed to stdout.
+- **Active Key Registry**: Maps `@alice`'s and `@bob`'s generated active/posting public keys so key reference lookups (`get_key_references`) resolve successfully.
 - **Dynamic Properties**: Simulates block number progression starting at block `100,000,000` and ticking up every 3 seconds.
-- **Mutable Local State**: Broadcast transfers update balances, savings transfers update savings balances, comments create posts/replies, and saved transactions become visible through transaction/history APIs.
+- **Mutable Local State**: Broadcast transfers/savings updates balances, `account_create` / `account_create_with_delegation` creates new accounts and registers their keys, comments create posts/replies, and saved transactions become visible through transaction/history APIs.
 
 ---
 

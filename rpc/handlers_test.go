@@ -18,7 +18,7 @@ func TestRPCHandlers(t *testing.T) {
 	}
 	defer s.Close()
 
-	handler := NewRPCHandler(s, false)
+	handler := NewRPCHandler(s, false, false)
 
 	t.Run("condenser_api.get_accounts", func(t *testing.T) {
 		reqBody := `{"jsonrpc":"2.0","method":"condenser_api.get_accounts","params":[["thecrazygm"]],"id":1}`
@@ -723,7 +723,7 @@ func TestOpenAPIMockResponses(t *testing.T) {
 	}
 	defer s.Close()
 
-	handler := NewRPCHandler(s, false)
+	handler := NewRPCHandler(s, false, false)
 
 	if len(knownHiveAPIMethods) != 215 {
 		t.Fatalf("expected 215 known Hive OpenAPI methods, got %d", len(knownHiveAPIMethods))

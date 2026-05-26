@@ -7,6 +7,7 @@ require (
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.1
 	github.com/dgraph-io/badger/v4 v4.9.1
 	golang.org/x/crypto v0.52.0
+	github.com/srbde/anther v0.0.0
 )
 
 require (
@@ -41,3 +42,5 @@ require (
 	golang.org/x/sys v0.45.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )
+
+replace github.com/srbde/anther => ../anther

@@ -17,15 +17,14 @@ func (h *RPCHandler) handleGetAccounts(params json.RawMessage) (any, *rpcError) 
 		return nil, &rpcError{Code: -32602, Message: "Invalid parameters"}
 	}
 
-	var results []EnrichedAccountData
+	var results []any
 
 	for _, name := range names {
-		var baseAcc state.AccountData
 		acc, err := h.state.GetAccount(name)
 		if err == nil && acc != nil {
-			baseAcc = *acc
-		} else {
-			baseAcc = state.AccountData{
+			results = append(results, enrichAccount(*acc))
+		} else if !h.strict {
+			baseAcc := state.AccountData{
 				Name:        name,
 				VotingPower: 10000,
 				VotingManabar: state.Manabar{
@@ -38,8 +37,10 @@ func (h *RPCHandler) handleGetAccounts(params json.RawMessage) (any, *rpcError) 
 				VestingShares: "5000000.000000 VESTS",
 				Created:       "2018-01-01T00:00:00",
 			}
+			results = append(results, enrichAccount(baseAcc))
+		} else {
+			results = append(results, nil)
 		}
-		results = append(results, enrichAccount(baseAcc))
 	}
 
 	return results, nil
@@ -65,12 +66,11 @@ func (h *RPCHandler) handleFindAccounts(params json.RawMessage) (any, *rpcError)
 	var results []EnrichedAccountData
 
 	for _, name := range args.Accounts {
-		var baseAcc state.AccountData
 		acc, err := h.state.GetAccount(name)
 		if err == nil && acc != nil {
-			baseAcc = *acc
-		} else {
-			baseAcc = state.AccountData{
+			results = append(results, enrichAccount(*acc))
+		} else if !h.strict {
+			baseAcc := state.AccountData{
 				Name:        name,
 				VotingPower: 10000,
 				VotingManabar: state.Manabar{
@@ -83,8 +83,8 @@ func (h *RPCHandler) handleFindAccounts(params json.RawMessage) (any, *rpcError)
 				VestingShares: "5000000.000000 VESTS",
 				Created:       "2018-01-01T00:00:00",
 			}
+			results = append(results, enrichAccount(baseAcc))
 		}
-		results = append(results, enrichAccount(baseAcc))
 	}
 
 	return map[string]any{

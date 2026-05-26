@@ -172,6 +172,10 @@ func (h *RPCHandler) handleGetContent(params json.RawMessage) (any, *rpcError) {
 		return post, nil
 	}
 
+	if h.strict {
+		return state.PostData{}, nil
+	}
+
 	fallback := state.PostData{
 		Author:       author,
 		Permlink:     permlink,
@@ -368,7 +372,7 @@ func (h *RPCHandler) handleGetAccountReputations(params json.RawMessage) (any, *
 func (h *RPCHandler) handleGetFollowers(params json.RawMessage) (any, *rpcError) {
 	account, _ := parseAccountLimit(params)
 	if account == "" {
-		account = "thecrazygm"
+		account = "alice"
 	}
 	return []any{
 		map[string]any{"follower": "alice", "following": account, "what": []string{"blog"}},
@@ -379,7 +383,7 @@ func (h *RPCHandler) handleGetFollowers(params json.RawMessage) (any, *rpcError)
 func (h *RPCHandler) handleGetFollowing(params json.RawMessage) (any, *rpcError) {
 	account, _ := parseAccountLimit(params)
 	if account == "" {
-		account = "thecrazygm"
+		account = "alice"
 	}
 	return []any{
 		map[string]any{"follower": account, "following": "alice", "what": []string{"blog"}},
@@ -464,6 +468,9 @@ func (h *RPCHandler) handleBridgePost(params json.RawMessage) (any, *rpcError) {
 
 	post, err := h.state.GetContent(author, permlink)
 	if err != nil || post == nil {
+		if h.strict {
+			return nil, nil
+		}
 		return bridgePost(state.PostData{
 			Author:       author,
 			Permlink:     permlink,
@@ -884,13 +891,13 @@ func (h *RPCHandler) handleListComments(params json.RawMessage) (any, *rpcError)
 	results := make([]state.PostData, 0)
 	if len(posts) == 0 {
 		fallback := state.PostData{
-			Author:            "hiveio",
-			Permlink:          "announcing-the-launch-of-hive-blockchain",
-			Category:          "blog",
-			Title:             "Announcing the Launch of Hive Blockchain",
-			Body:              "This is the official announcement post of the Hive blockchain. Welcome to Hive!",
-			JSONMetadata:      "{}",
-			Created:           "2020-03-20T00:00:00",
+			Author:       "hiveio",
+			Permlink:     "announcing-the-launch-of-hive-blockchain",
+			Category:     "blog",
+			Title:        "Announcing the Launch of Hive Blockchain",
+			Body:         "This is the official announcement post of the Hive blockchain. Welcome to Hive!",
+			JSONMetadata: "{}",
+			Created:      "2020-03-20T00:00:00",
 		}
 		results = append(results, fallback)
 	} else {

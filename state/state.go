@@ -1,6 +1,8 @@
 package state
 
 import (
+	"crypto/rand"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +11,7 @@ import (
 	"time"
 
 	"github.com/dgraph-io/badger/v4"
+	anthercrypto "github.com/srbde/anther/crypto"
 )
 
 type Manabar struct {
@@ -27,6 +30,14 @@ type AccountData struct {
 	Created           string  `json:"created"`
 	SavingsBalance    string  `json:"savings_balance"`
 	SavingsHbdBalance string  `json:"savings_hbd_balance"`
+
+	// Key fields (dynamic / rotating)
+	ActiveKey         string `json:"active_key,omitempty"`
+	PostingKey        string `json:"posting_key,omitempty"`
+	OwnerKey          string `json:"owner_key,omitempty"`
+	MemoKey           string `json:"memo_key,omitempty"`
+	ActivePrivateKey  string `json:"active_private_key,omitempty"`
+	PostingPrivateKey string `json:"posting_private_key,omitempty"`
 }
 
 type PostData struct {
@@ -124,10 +135,19 @@ func (s *State) seedDefaults() error {
 		}
 
 		// Helper to seed an account if not present
-		seedAcc := func(name, balance, hbd, vesting string, keys []string) error {
+		seedAcc := func(name, balance, hbd, vesting string) error {
 			key := []byte("acc:" + name)
 			_, err := txn.Get(key)
 			if errors.Is(err, badger.ErrKeyNotFound) {
+				activeWif, activePub, err := GenerateRandomKeyPair()
+				if err != nil {
+					return err
+				}
+				postingWif, postingPub, err := GenerateRandomKeyPair()
+				if err != nil {
+					return err
+				}
+
 				acc := AccountData{
 					Name:        name,
 					VotingPower: 10000,
@@ -135,39 +155,39 @@ func (s *State) seedDefaults() error {
 						CurrentMana:    10000,
 						LastUpdateTime: time.Now().Unix(),
 					},
-					LastVoteTime:  "1970-01-01T00:00:00",
-					Balance:       balance,
-					HbdBalance:    hbd,
-					VestingShares: vesting,
-					Created:       "2016-03-24T16:00:00",
+					LastVoteTime:      "1970-01-01T00:00:00",
+					Balance:           balance,
+					HbdBalance:        hbd,
+					VestingShares:     vesting,
+					Created:           "2016-03-24T16:00:00",
+					ActiveKey:         activePub,
+					ActivePrivateKey:  activeWif,
+					PostingKey:        postingPub,
+					PostingPrivateKey: postingWif,
+					OwnerKey:          activePub,
+					MemoKey:           activePub,
 				}
 				bytes, _ := json.Marshal(acc)
 				if err := txn.Set(key, bytes); err != nil {
 					return err
 				}
 
-				for _, k := range keys {
-					if err := txn.Set([]byte("key:"+k), []byte(name)); err != nil {
-						return err
-					}
+				if err := txn.Set([]byte("key:"+activePub), []byte(name)); err != nil {
+					return err
+				}
+				if err := txn.Set([]byte("key:"+postingPub), []byte(name)); err != nil {
+					return err
 				}
 			}
 			return nil
 		}
 
 		// Seed standard test accounts
-		if err := seedAcc("thecrazygm", "1000.000 HIVE", "500.000 HBD", "10000000.000000 VESTS", []string{
-			"STM5kQ1uy2CGNSwibSeYyLELWFng3HTyYVSsQd4Bjd4sWfqgKgtgJ", // active pub
-			"STM8Ep2rQp1wPzBPE2tS7tfcvU2JpbnkeyhfsYB1Jcnz7S2w8H9Q3", // posting pub
-		}); err != nil {
+		if err := seedAcc("alice", "500.000 HIVE", "100.000 HBD", "5000000.000000 VESTS"); err != nil {
 			return err
 		}
 
-		if err := seedAcc("alice", "500.000 HIVE", "100.000 HBD", "5000000.000000 VESTS", nil); err != nil {
-			return err
-		}
-
-		if err := seedAcc("bob", "250.000 HIVE", "50.000 HBD", "2500000.000000 VESTS", nil); err != nil {
+		if err := seedAcc("bob", "250.000 HIVE", "50.000 HBD", "2500000.000000 VESTS"); err != nil {
 			return err
 		}
 
@@ -422,4 +442,35 @@ func (s *State) SaveTransaction(tx *TransactionData) error {
 		}
 		return txn.Set([]byte("tx:"+tx.TransactionID), bytes)
 	})
+}
+
+// GenerateRandomKeyPair generates a random private key (WIF) and its corresponding public key (STM...).
+func GenerateRandomKeyPair() (string, string, error) {
+	privKeyBytes := make([]byte, 32)
+	_, err := rand.Read(privKeyBytes)
+	if err != nil {
+		return "", "", err
+	}
+
+	// Construct WIF: version 0x80 + private key (32 bytes) + compressed flag 0x01 (1 byte)
+	data := make([]byte, 0, 34)
+	data = append(data, 0x80)
+	data = append(data, privKeyBytes...)
+	data = append(data, 0x01)
+
+	// Double SHA256 for checksum
+	h1 := sha256.Sum256(data)
+	h2 := sha256.Sum256(h1[:])
+	checksum := h2[:4]
+
+	wifBytes := append(data, checksum...)
+	wifStr := anthercrypto.Base58Encode(wifBytes)
+
+	// Derive public key from WIF
+	pubKey, err := anthercrypto.WIFToPublicKey(wifStr)
+	if err != nil {
+		return "", "", err
+	}
+
+	return wifStr, pubKey, nil
 }
