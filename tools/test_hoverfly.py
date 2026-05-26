@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # dependencies = [
-#     "httpx",
+#     "httpx2",
 #     "rich",
 # ]
 # ///
@@ -31,7 +31,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-import httpx
+import httpx2
 from rich import box
 from rich.console import Console
 from rich.panel import Panel
@@ -126,7 +126,7 @@ def load_test_cases(dump_path: Path) -> list[TestCase]:
 
 
 def run_case(
-    case: TestCase, url: str, timeout: float, client: httpx.Client
+    case: TestCase, url: str, timeout: float, client: httpx2.Client
 ) -> TestResult:
     if not case.payload:
         return TestResult(
@@ -140,7 +140,7 @@ def run_case(
     try:
         resp = client.post(url, json=case.payload, timeout=timeout)
         elapsed = (time.perf_counter() - t0) * 1000
-    except httpx.ConnectError:
+    except httpx2.ConnectError:
         return TestResult(
             case=case,
             status="error",
@@ -148,7 +148,7 @@ def run_case(
             error_msg="Connection refused — is Hoverfly running?",
             elapsed_ms=(time.perf_counter() - t0) * 1000,
         )
-    except httpx.TimeoutException:
+    except httpx2.TimeoutException:
         return TestResult(
             case=case,
             status="error",
@@ -407,7 +407,7 @@ def main() -> None:
         task = progress.add_task("[cyan]Running API tests…", total=len(cases))
 
         if args.parallel == 1:
-            with httpx.Client() as client:
+            with httpx2.Client() as client:
                 for case in cases:
                     result = run_case(case, args.url, args.timeout, client)
                     results[case.index - 1] = result
@@ -427,7 +427,7 @@ def main() -> None:
                         description=f"[{color}]{icon}[/{color}] [dim]{case.method[:55]}[/dim]",
                     )
         else:
-            with httpx.Client() as client:
+            with httpx2.Client() as client:
                 with ThreadPoolExecutor(max_workers=args.parallel) as executor:
                     future_to_case = {
                         executor.submit(
