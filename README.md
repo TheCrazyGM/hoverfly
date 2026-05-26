@@ -61,7 +61,7 @@ No more dry, unreadable terminal logs. Hoverfly uses **[charmbracelet/log](https
 
 ### 🔌 Ecosystem Alignment
 
-Hoverfly is the local testing companion to **[Anther](https://github.com/thecrazygm/anther)** (Go), **[Pollen](https://github.com/srbde/pollen)** (TypeScript), **[Xylem](https://github.com/srbde/xylem)** (Rust), and **[Nectar](https://github.com/srbde/hive-nectar)** (Python). Together, they form a unified, secure foundation for building cross-platform Hive applications under the **SRBDE** umbrella.
+Hoverfly is the local testing companion to **[Anther](https://github.com/srbde/anther)** (Go), **[Pollen](https://github.com/srbde/pollen)** (TypeScript), **[Xylem](https://github.com/srbde/xylem)** (Rust), and **[Nectar](https://github.com/srbde/hive-nectar)** (Python). Together, they form a unified, secure foundation for building cross-platform Hive applications under the **SRBDE** umbrella.
 
 ---
 
@@ -158,8 +158,8 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/thecrazygm/anther/client"
-	"github.com/thecrazygm/anther/transaction"
+	"github.com/srbde/anther/client"
+	"github.com/srbde/anther/transaction"
 )
 
 func main() {
