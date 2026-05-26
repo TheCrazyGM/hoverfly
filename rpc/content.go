@@ -1,0 +1,908 @@
+package rpc
+
+import (
+	"crypto/sha256"
+	"encoding/json"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/thecrazygm/hoverfly/state"
+)
+
+type CommentRef struct {
+	Author   string `json:"author"`
+	Permlink string `json:"permlink"`
+}
+
+func parseCommentRefs(params json.RawMessage) []CommentRef {
+	// 1. Try parsing as {comments: [["author", "permlink"], ...]} or {comments: [{"author": "...", "permlink": "..."}, ...]}
+	var rawArgs struct {
+		Comments []json.RawMessage `json:"comments"`
+	}
+	if err := json.Unmarshal(params, &rawArgs); err == nil && len(rawArgs.Comments) > 0 {
+		var refs []CommentRef
+		for _, raw := range rawArgs.Comments {
+			// Try as {"author": "...", "permlink": "..."}
+			var s CommentRef
+			if err := json.Unmarshal(raw, &s); err == nil && s.Author != "" {
+				refs = append(refs, s)
+				continue
+			}
+			// Try as ["author", "permlink"]
+			var arr []string
+			if err := json.Unmarshal(raw, &arr); err == nil && len(arr) >= 2 {
+				refs = append(refs, CommentRef{Author: arr[0], Permlink: arr[1]})
+			}
+		}
+		if len(refs) > 0 {
+			return refs
+		}
+	}
+
+	// 2. Try parsing as a single [author, permlink] array or single {"author": "...", "permlink": "..."} object
+	// Try single {"author": "...", "permlink": "..."} or {"account": "...", "permlink": "..."}
+	var s struct {
+		Author   string `json:"author"`
+		Account  string `json:"account"`
+		Permlink string `json:"permlink"`
+	}
+	if err := json.Unmarshal(params, &s); err == nil && (s.Author != "" || s.Account != "") {
+		author := s.Author
+		if author == "" {
+			author = s.Account
+		}
+		return []CommentRef{{Author: author, Permlink: s.Permlink}}
+	}
+
+	// Try single ["author", "permlink"] array
+	var arr []string
+	if err := json.Unmarshal(params, &arr); err == nil && len(arr) >= 2 {
+		return []CommentRef{{Author: arr[0], Permlink: arr[1]}}
+	}
+
+	// Try wrapped single object [{"author": "...", "permlink": "..."}]
+	var wrapped []struct {
+		Author   string `json:"author"`
+		Account  string `json:"account"`
+		Permlink string `json:"permlink"`
+	}
+	if err := json.Unmarshal(params, &wrapped); err == nil && len(wrapped) > 0 {
+		author := wrapped[0].Author
+		if author == "" {
+			author = wrapped[0].Account
+		}
+		return []CommentRef{{Author: author, Permlink: wrapped[0].Permlink}}
+	}
+
+	return nil
+}
+
+func parseContentRef(params json.RawMessage) (string, string) {
+	var args []string
+	if err := json.Unmarshal(params, &args); err == nil && len(args) >= 2 {
+		return args[0], args[1]
+	}
+
+	var objectArgs struct {
+		Author   string `json:"author"`
+		Account  string `json:"account"`
+		Permlink string `json:"permlink"`
+	}
+	if err := json.Unmarshal(params, &objectArgs); err == nil {
+		author := objectArgs.Author
+		if author == "" {
+			author = objectArgs.Account
+		}
+		return author, objectArgs.Permlink
+	}
+
+	var wrappedObjectArgs []struct {
+		Author   string `json:"author"`
+		Account  string `json:"account"`
+		Permlink string `json:"permlink"`
+	}
+	if err := json.Unmarshal(params, &wrappedObjectArgs); err == nil && len(wrappedObjectArgs) > 0 {
+		author := wrappedObjectArgs[0].Author
+		if author == "" {
+			author = wrappedObjectArgs[0].Account
+		}
+		return author, wrappedObjectArgs[0].Permlink
+	}
+
+	return "", ""
+}
+
+func parseAccountLimit(params json.RawMessage) (string, int) {
+	limit := 20
+	var args []any
+	if err := json.Unmarshal(params, &args); err == nil && len(args) > 0 {
+		account, _ := args[0].(string)
+		if len(args) > 2 {
+			if rawLimit, ok := args[2].(float64); ok && rawLimit > 0 {
+				limit = int(rawLimit)
+			}
+		} else if len(args) > 1 {
+			if rawLimit, ok := args[1].(float64); ok && rawLimit > 0 {
+				limit = int(rawLimit)
+			}
+		}
+		return account, clampLimit(limit, 500)
+	}
+
+	var objectArgs struct {
+		Account string `json:"account"`
+		Limit   int    `json:"limit"`
+	}
+	if err := json.Unmarshal(params, &objectArgs); err == nil {
+		if objectArgs.Limit > 0 {
+			limit = objectArgs.Limit
+		}
+		return objectArgs.Account, clampLimit(limit, 500)
+	}
+	return "", limit
+}
+
+func (h *RPCHandler) postsByAuthor(account string, limit int) ([]state.PostData, error) {
+	posts, err := h.state.ListContent()
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]state.PostData, 0, limit)
+	for _, post := range posts {
+		if post.Author == account {
+			results = append(results, post)
+			if len(results) >= limit {
+				break
+			}
+		}
+	}
+	return results, nil
+}
+
+func (h *RPCHandler) handleGetContent(params json.RawMessage) (any, *rpcError) {
+	author, permlink := parseContentRef(params)
+	if author == "" || permlink == "" {
+		return nil, &rpcError{Code: -32602, Message: "Invalid parameters"}
+	}
+
+	post, err := h.state.GetContent(author, permlink)
+	if err == nil && post != nil {
+		return post, nil
+	}
+
+	fallback := state.PostData{
+		Author:       author,
+		Permlink:     permlink,
+		Category:     "blog",
+		Title:        "Mock Post Title",
+		Body:         "Lorem ipsum dolor sit amet, consectetur adipiscing elit. This is a mock post generated by Hoverfly. 🛸",
+		JSONMetadata: "{}",
+		Created:      time.Now().UTC().Format("2006-01-02T15:04:05"),
+		ActiveVotes:  []string{},
+	}
+	return fallback, nil
+}
+
+func (h *RPCHandler) handleGetContentReplies(params json.RawMessage) (any, *rpcError) {
+	author, permlink := parseContentRef(params)
+	if author == "" || permlink == "" {
+		return nil, &rpcError{Code: -32602, Message: "Invalid parameters"}
+	}
+
+	posts, err := h.state.ListContent()
+	if err != nil {
+		return nil, &rpcError{Code: -32603, Message: err.Error()}
+	}
+
+	var replies []state.PostData
+	for _, post := range posts {
+		if post.ParentAuthor == author && post.ParentPermlink == permlink {
+			replies = append(replies, post)
+		}
+	}
+	return replies, nil
+}
+
+func (h *RPCHandler) handleGetActiveVotes(params json.RawMessage) (any, *rpcError) {
+	author, permlink := parseContentRef(params)
+	if author == "" || permlink == "" {
+		return nil, &rpcError{Code: -32602, Message: "Invalid parameters"}
+	}
+
+	post, err := h.state.GetContent(author, permlink)
+	if err != nil || post == nil {
+		return []any{}, nil
+	}
+
+	votes := make([]any, 0, len(post.ActiveVotes))
+	for _, voter := range post.ActiveVotes {
+		votes = append(votes, map[string]any{
+			"voter":      voter,
+			"author":     author,
+			"permlink":   permlink,
+			"percent":    10000,
+			"rshares":    0,
+			"time":       post.Created,
+			"reputation": "1000000000000",
+		})
+	}
+	return votes, nil
+}
+
+func (h *RPCHandler) handleDatabaseVotes(params json.RawMessage) (any, *rpcError) {
+	votes, rpcErr := h.handleGetActiveVotes(params)
+	if rpcErr != nil {
+		return map[string]any{"votes": []any{}}, nil
+	}
+	return map[string]any{"votes": votes}, nil
+}
+
+func (h *RPCHandler) handleGetBlog(params json.RawMessage) (any, *rpcError) {
+	account, limit := parseAccountLimit(params)
+	if account == "" {
+		return nil, &rpcError{Code: -32602, Message: "Invalid parameters"}
+	}
+
+	posts, err := h.postsByAuthor(account, limit)
+	if err != nil {
+		return nil, &rpcError{Code: -32603, Message: err.Error()}
+	}
+	return posts, nil
+}
+
+func (h *RPCHandler) handleGetBlogEntries(params json.RawMessage) (any, *rpcError) {
+	account, limit := parseAccountLimit(params)
+	if account == "" {
+		return nil, &rpcError{Code: -32602, Message: "Invalid parameters"}
+	}
+
+	posts, err := h.postsByAuthor(account, limit)
+	if err != nil {
+		return nil, &rpcError{Code: -32603, Message: err.Error()}
+	}
+
+	entries := make([]any, 0, len(posts))
+	for i, post := range posts {
+		entries = append(entries, map[string]any{
+			"entry_id":  i,
+			"author":    post.Author,
+			"permlink":  post.Permlink,
+			"blog":      account,
+			"reblog_on": post.Created,
+		})
+	}
+	return entries, nil
+}
+
+func (h *RPCHandler) handleGetDiscussions(params json.RawMessage) (any, *rpcError) {
+	limit := 20
+	tag := ""
+	var objectArgs struct {
+		Limit int    `json:"limit"`
+		Tag   string `json:"tag"`
+	}
+	if err := json.Unmarshal(params, &objectArgs); err == nil {
+		if objectArgs.Limit > 0 {
+			limit = objectArgs.Limit
+		}
+		tag = objectArgs.Tag
+	}
+	var wrappedObjectArgs []struct {
+		Limit int    `json:"limit"`
+		Tag   string `json:"tag"`
+	}
+	if tag == "" {
+		if err := json.Unmarshal(params, &wrappedObjectArgs); err == nil && len(wrappedObjectArgs) > 0 {
+			if wrappedObjectArgs[0].Limit > 0 {
+				limit = wrappedObjectArgs[0].Limit
+			}
+			tag = wrappedObjectArgs[0].Tag
+		}
+	}
+	limit = clampLimit(limit, 100)
+
+	posts, err := h.state.ListContent()
+	if err != nil {
+		return nil, &rpcError{Code: -32603, Message: err.Error()}
+	}
+
+	results := make([]state.PostData, 0, limit)
+	for _, post := range posts {
+		if tag != "" && post.Category != tag {
+			continue
+		}
+		results = append(results, post)
+		if len(results) >= limit {
+			break
+		}
+	}
+	return results, nil
+}
+
+func (h *RPCHandler) handleFindComments(params json.RawMessage) (any, *rpcError) {
+	refs := parseCommentRefs(params)
+	if len(refs) == 0 {
+		return nil, &rpcError{Code: -32602, Message: "Invalid parameters"}
+	}
+
+	comments := make([]any, 0, len(refs))
+	for _, ref := range refs {
+		post, err := h.state.GetContent(ref.Author, ref.Permlink)
+		if err != nil || post == nil {
+			continue
+		}
+		comments = append(comments, post)
+	}
+	return map[string]any{"comments": comments}, nil
+}
+
+func (h *RPCHandler) handleGetAccountReputations(params json.RawMessage) (any, *rpcError) {
+	account, limit := parseAccountLimit(params)
+	if limit <= 0 {
+		limit = 100
+	}
+
+	accounts, err := h.state.ListAccounts()
+	if err != nil {
+		return nil, &rpcError{Code: -32603, Message: err.Error()}
+	}
+
+	results := make([]any, 0, limit)
+	for _, acc := range accounts {
+		if account != "" && acc.Name < account {
+			continue
+		}
+		results = append(results, map[string]any{
+			"account":    acc.Name,
+			"reputation": "1000000000000",
+		})
+		if len(results) >= limit {
+			break
+		}
+	}
+	return results, nil
+}
+
+func (h *RPCHandler) handleGetFollowers(params json.RawMessage) (any, *rpcError) {
+	account, _ := parseAccountLimit(params)
+	if account == "" {
+		account = "thecrazygm"
+	}
+	return []any{
+		map[string]any{"follower": "alice", "following": account, "what": []string{"blog"}},
+		map[string]any{"follower": "bob", "following": account, "what": []string{"blog"}},
+	}, nil
+}
+
+func (h *RPCHandler) handleGetFollowing(params json.RawMessage) (any, *rpcError) {
+	account, _ := parseAccountLimit(params)
+	if account == "" {
+		account = "thecrazygm"
+	}
+	return []any{
+		map[string]any{"follower": account, "following": "alice", "what": []string{"blog"}},
+		map[string]any{"follower": account, "following": "bob", "what": []string{"blog"}},
+	}, nil
+}
+
+func (h *RPCHandler) handleCommentPendingPayouts(params json.RawMessage) (any, *rpcError) {
+	refs := parseCommentRefs(params)
+	if len(refs) == 0 {
+		return nil, &rpcError{Code: -32602, Message: "Invalid parameters"}
+	}
+
+	var infos []any
+	for _, ref := range refs {
+		post, err := h.state.GetContent(ref.Author, ref.Permlink)
+		var author, permlink string
+		if err == nil && post != nil {
+			author = post.Author
+			permlink = post.Permlink
+		} else {
+			author = ref.Author
+			permlink = ref.Permlink
+		}
+
+		infos = append(infos, map[string]any{
+			"author":                 author,
+			"permlink":               permlink,
+			"cashout_time":           "1969-12-31T23:59:59",
+			"total_vote_weight":      0,
+			"max_accepted_payout":    "0.000 HBD",
+			"percent_hbd":            10000,
+			"allow_curation_rewards": true,
+		})
+	}
+
+	return map[string]any{
+		"cashout_infos": infos,
+	}, nil
+}
+
+func (h *RPCHandler) handleSearchText(params json.RawMessage) (any, *rpcError) {
+	query := ""
+	var args struct {
+		Q     string `json:"q"`
+		Query string `json:"query"`
+		Limit int    `json:"limit"`
+	}
+	if err := json.Unmarshal(params, &args); err == nil {
+		query = args.Q
+		if query == "" {
+			query = args.Query
+		}
+	}
+	if query == "" {
+		var arrArgs []any
+		if err := json.Unmarshal(params, &arrArgs); err == nil && len(arrArgs) > 0 {
+			query, _ = arrArgs[0].(string)
+		}
+	}
+	query = strings.ToLower(query)
+
+	posts, err := h.state.ListContent()
+	if err != nil {
+		return nil, &rpcError{Code: -32603, Message: err.Error()}
+	}
+	results := make([]any, 0)
+	for _, post := range posts {
+		haystack := strings.ToLower(post.Title + " " + post.Body + " " + post.Author + " " + post.Permlink)
+		if query == "" || strings.Contains(haystack, query) {
+			results = append(results, post)
+		}
+	}
+	return map[string]any{"results": results}, nil
+}
+
+func (h *RPCHandler) handleBridgePost(params json.RawMessage) (any, *rpcError) {
+	author, permlink := parseContentRef(params)
+	if author == "" || permlink == "" {
+		return nil, &rpcError{Code: -32602, Message: "Invalid parameters"}
+	}
+
+	post, err := h.state.GetContent(author, permlink)
+	if err != nil || post == nil {
+		return bridgePost(state.PostData{
+			Author:       author,
+			Permlink:     permlink,
+			Category:     "blog",
+			Title:        "Mock Post Title",
+			Body:         "Local Hoverfly bridge post for script testing.",
+			JSONMetadata: "{}",
+			Created:      time.Now().UTC().Format("2006-01-02T15:04:05"),
+			ActiveVotes:  []string{},
+		}), nil
+	}
+	return bridgePost(*post), nil
+}
+
+func (h *RPCHandler) handleBridgePostHeader(params json.RawMessage) (any, *rpcError) {
+	post, rpcErr := h.handleBridgePost(params)
+	if rpcErr != nil {
+		return nil, rpcErr
+	}
+	postMap, _ := post.(map[string]any)
+	return map[string]any{
+		"author":   postMap["author"],
+		"permlink": postMap["permlink"],
+		"category": postMap["category"],
+		"depth":    postMap["depth"],
+	}, nil
+}
+
+func (h *RPCHandler) handleBridgeDiscussion(params json.RawMessage) (any, *rpcError) {
+	author, permlink := parseContentRef(params)
+	if author == "" || permlink == "" {
+		return nil, &rpcError{Code: -32602, Message: "Invalid parameters"}
+	}
+
+	discussion := map[string]any{}
+	root, err := h.state.GetContent(author, permlink)
+	if err != nil || root == nil {
+		root = &state.PostData{
+			Author:       author,
+			Permlink:     permlink,
+			Category:     "blog",
+			Title:        "Mock Post Title",
+			Body:         "Local Hoverfly bridge discussion root.",
+			JSONMetadata: "{}",
+			Created:      time.Now().UTC().Format("2006-01-02T15:04:05"),
+			ActiveVotes:  []string{},
+		}
+	}
+	discussion[root.Author+"/"+root.Permlink] = bridgePost(*root)
+
+	posts, err := h.state.ListContent()
+	if err != nil {
+		return nil, &rpcError{Code: -32603, Message: err.Error()}
+	}
+	for _, post := range posts {
+		if post.ParentAuthor == author && post.ParentPermlink == permlink {
+			discussion[post.Author+"/"+post.Permlink] = bridgePost(post)
+		}
+	}
+	return discussion, nil
+}
+
+func (h *RPCHandler) handleBridgeAccountPosts(params json.RawMessage) (any, *rpcError) {
+	var args struct {
+		Account string `json:"account"`
+		Sort    string `json:"sort"`
+		Limit   int    `json:"limit"`
+	}
+	if err := json.Unmarshal(params, &args); err != nil || args.Account == "" {
+		var wrapped []struct {
+			Account string `json:"account"`
+			Sort    string `json:"sort"`
+			Limit   int    `json:"limit"`
+		}
+		if err := json.Unmarshal(params, &wrapped); err == nil && len(wrapped) > 0 {
+			args = wrapped[0]
+		}
+	}
+	if args.Account == "" {
+		return nil, &rpcError{Code: -32602, Message: "Invalid parameters"}
+	}
+	limit := clampLimit(args.Limit, 100)
+
+	posts, err := h.state.ListContent()
+	if err != nil {
+		return nil, &rpcError{Code: -32603, Message: err.Error()}
+	}
+	results := make([]any, 0, limit)
+	for _, post := range posts {
+		if post.Author != args.Account {
+			continue
+		}
+		if args.Sort == "replies" && post.ParentAuthor == "" {
+			continue
+		}
+		results = append(results, bridgePost(post))
+		if len(results) >= limit {
+			break
+		}
+	}
+	return results, nil
+}
+
+func (h *RPCHandler) handleBridgeRankedPosts(params json.RawMessage) (any, *rpcError) {
+	limit, tag := bridgeLimitAndTag(params)
+	posts, err := h.state.ListContent()
+	if err != nil {
+		return nil, &rpcError{Code: -32603, Message: err.Error()}
+	}
+
+	results := make([]any, 0, limit)
+	for _, post := range posts {
+		if tag != "" && post.Category != tag && post.ParentPermlink != tag {
+			continue
+		}
+		results = append(results, bridgePost(post))
+		if len(results) >= limit {
+			break
+		}
+	}
+	return results, nil
+}
+
+func bridgePost(post state.PostData) map[string]any {
+	metadata := map[string]any{}
+	if post.JSONMetadata != "" {
+		_ = json.Unmarshal([]byte(post.JSONMetadata), &metadata)
+	}
+	depth := 0
+	if post.ParentAuthor != "" {
+		depth = 1
+	}
+	category := post.Category
+	if category == "" {
+		category = post.ParentPermlink
+	}
+	if category == "" {
+		category = "blog"
+	}
+	url := fmt.Sprintf("/%s/@%s/%s", category, post.Author, post.Permlink)
+	if post.ParentAuthor != "" {
+		url = fmt.Sprintf("/%s/@%s/%s#@%s/%s", category, post.ParentAuthor, post.ParentPermlink, post.Author, post.Permlink)
+	}
+
+	activeVotes := make([]any, 0, len(post.ActiveVotes))
+	for _, voter := range post.ActiveVotes {
+		activeVotes = append(activeVotes, map[string]any{"voter": voter, "rshares": 0})
+	}
+
+	return map[string]any{
+		"active_votes":         activeVotes,
+		"author":               post.Author,
+		"author_payout_value":  "0.000 HBD",
+		"author_reputation":    25,
+		"beneficiaries":        []any{},
+		"blacklists":           []any{},
+		"body":                 post.Body,
+		"category":             category,
+		"children":             0,
+		"created":              post.Created,
+		"curator_payout_value": "0.000 HBD",
+		"depth":                depth,
+		"is_paidout":           false,
+		"json_metadata":        metadata,
+		"max_accepted_payout":  "1000000.000 HBD",
+		"parent_author":        post.ParentAuthor,
+		"parent_permlink":      post.ParentPermlink,
+		"payout":               0,
+		"pending_payout_value": "0.000 HBD",
+		"percent_hbd":          10000,
+		"permlink":             post.Permlink,
+		"post_id":              stablePostID(post.Author, post.Permlink),
+		"reblogs":              0,
+		"replies":              []any{},
+		"stats":                map[string]any{"flag_weight": 0, "gray": false, "hide": false, "total_votes": len(activeVotes)},
+		"title":                post.Title,
+		"updated":              post.Created,
+		"url":                  url,
+	}
+}
+
+func stablePostID(author, permlink string) uint32 {
+	sum := sha256.Sum256([]byte(author + "/" + permlink))
+	return uint32(sum[0])<<24 | uint32(sum[1])<<16 | uint32(sum[2])<<8 | uint32(sum[3])
+}
+
+func (h *RPCHandler) handleBridgeProfile(params json.RawMessage) (any, *rpcError) {
+	account := bridgeProfileAccount(params)
+	if account == "" {
+		return nil, &rpcError{Code: -32602, Message: "Invalid parameters"}
+	}
+	return h.bridgeProfile(account), nil
+}
+
+func (h *RPCHandler) handleBridgeProfiles(params json.RawMessage) (any, *rpcError) {
+	accounts := bridgeProfileAccounts(params)
+	if len(accounts) == 0 {
+		return nil, &rpcError{Code: -32602, Message: "Invalid parameters"}
+	}
+	results := make([]any, 0, len(accounts))
+	for _, account := range accounts {
+		results = append(results, h.bridgeProfile(account))
+	}
+	return results, nil
+}
+
+func (h *RPCHandler) bridgeProfile(account string) map[string]any {
+	created := time.Now().UTC().Format("2006-01-02T15:04:05")
+	if acc, err := h.state.GetAccount(account); err == nil && acc != nil {
+		created = acc.Created
+	}
+	posts, _ := h.postsByAuthor(account, 500)
+	return map[string]any{
+		"active":     created,
+		"blacklists": []any{},
+		"context":    map[string]any{"followed": false, "muted": false},
+		"created":    created,
+		"id":         stablePostID(account, "profile"),
+		"metadata": map[string]any{
+			"profile": map[string]any{
+				"about": "", "blacklist_description": "", "cover_image": "", "location": "",
+				"muted_list_description": "", "name": account, "profile_image": "", "website": "",
+			},
+		},
+		"name":       account,
+		"post_count": len(posts),
+		"reputation": 25,
+		"stats":      map[string]any{"followers": 0, "following": 0, "rank": 0},
+	}
+}
+
+func bridgeProfileAccount(params json.RawMessage) string {
+	var args struct {
+		Account string `json:"account"`
+	}
+	if err := json.Unmarshal(params, &args); err == nil && args.Account != "" {
+		return args.Account
+	}
+	var wrapped []struct {
+		Account string `json:"account"`
+	}
+	if err := json.Unmarshal(params, &wrapped); err == nil && len(wrapped) > 0 {
+		return wrapped[0].Account
+	}
+	var arr []string
+	if err := json.Unmarshal(params, &arr); err == nil && len(arr) > 0 {
+		return arr[0]
+	}
+	return ""
+}
+
+func bridgeProfileAccounts(params json.RawMessage) []string {
+	var args struct {
+		Accounts []string `json:"accounts"`
+	}
+	if err := json.Unmarshal(params, &args); err == nil && len(args.Accounts) > 0 {
+		return args.Accounts
+	}
+	var wrapped []struct {
+		Accounts []string `json:"accounts"`
+	}
+	if err := json.Unmarshal(params, &wrapped); err == nil && len(wrapped) > 0 {
+		return wrapped[0].Accounts
+	}
+	var arr [][]string
+	if err := json.Unmarshal(params, &arr); err == nil && len(arr) > 0 {
+		return arr[0]
+	}
+	return nil
+}
+
+func (h *RPCHandler) handleBridgeCommunity(params json.RawMessage) (any, *rpcError) {
+	return bridgeCommunity(bridgeCommunityName(params)), nil
+}
+
+func (h *RPCHandler) handleBridgeListCommunities(params json.RawMessage) (any, *rpcError) {
+	limit, _ := bridgeLimitAndTag(params)
+	if limit <= 0 {
+		limit = 1
+	}
+	communities := []any{bridgeCommunity(bridgeCommunityName(params))}
+	if limit < len(communities) {
+		communities = communities[:limit]
+	}
+	return communities, nil
+}
+
+func (h *RPCHandler) handleBridgeListPopCommunities(params json.RawMessage) (any, *rpcError) {
+	name := bridgeCommunityName(params)
+	community := bridgeCommunity(name)
+	return []any{[]any{community["name"], community["title"]}}, nil
+}
+
+func (h *RPCHandler) handleBridgeTrendingTopics(params json.RawMessage) (any, *rpcError) {
+	name := bridgeCommunityName(params)
+	community := bridgeCommunity(name)
+	return []any{[]any{community["name"], community["title"]}}, nil
+}
+
+func (h *RPCHandler) handleBridgePayoutStats() (any, *rpcError) {
+	posts, err := h.state.ListContent()
+	if err != nil {
+		return nil, &rpcError{Code: -32603, Message: err.Error()}
+	}
+	authors := map[string]struct{}{}
+	for _, post := range posts {
+		authors[post.Author] = struct{}{}
+	}
+	return map[string]any{
+		"blogs": 0,
+		"items": []any{
+			[]any{"@local", "@local", 0, len(posts), len(authors)},
+		},
+		"total": 0,
+	}, nil
+}
+
+func bridgeCommunity(name string) map[string]any {
+	if name == "" {
+		name = "hive-123456"
+	}
+	return map[string]any{
+		"about":       "Local Hoverfly community for script testing.",
+		"admins":      []string{},
+		"avatar_url":  "",
+		"context":     map[string]any{"role": "guest", "subscribed": false, "title": ""},
+		"created_at":  "2019-10-27 08:28:51",
+		"description": "Local Hoverfly community for script testing.",
+		"flag_text":   "",
+		"id":          stablePostID(name, "community"),
+		"is_nsfw":     false,
+		"lang":        "en",
+		"name":        name,
+		"num_authors": 0,
+		"num_pending": 0,
+		"settings":    map[string]any{},
+		"subscribers": 0,
+		"sum_pending": 0,
+		"team":        []any{[]any{name, "owner", ""}},
+		"title":       name,
+		"type_id":     1,
+	}
+}
+
+func bridgeCommunityName(params json.RawMessage) string {
+	var args struct {
+		Name      string `json:"name"`
+		Community string `json:"community"`
+	}
+	if err := json.Unmarshal(params, &args); err == nil {
+		if args.Name != "" {
+			return args.Name
+		}
+		return args.Community
+	}
+	var wrapped []struct {
+		Name      string `json:"name"`
+		Community string `json:"community"`
+	}
+	if err := json.Unmarshal(params, &wrapped); err == nil && len(wrapped) > 0 {
+		if wrapped[0].Name != "" {
+			return wrapped[0].Name
+		}
+		return wrapped[0].Community
+	}
+	return ""
+}
+
+func bridgeLimitAndTag(params json.RawMessage) (int, string) {
+	limit := 20
+	tag := ""
+	var args struct {
+		Limit int    `json:"limit"`
+		Tag   string `json:"tag"`
+	}
+	if err := json.Unmarshal(params, &args); err == nil {
+		if args.Limit > 0 {
+			limit = args.Limit
+		}
+		tag = args.Tag
+	}
+	var wrapped []struct {
+		Limit int    `json:"limit"`
+		Tag   string `json:"tag"`
+	}
+	if err := json.Unmarshal(params, &wrapped); err == nil && len(wrapped) > 0 {
+		if wrapped[0].Limit > 0 {
+			limit = wrapped[0].Limit
+		}
+		if wrapped[0].Tag != "" {
+			tag = wrapped[0].Tag
+		}
+	}
+	return clampLimit(limit, 100), tag
+}
+
+func (h *RPCHandler) handleListComments(params json.RawMessage) (any, *rpcError) {
+	var args struct {
+		Start []any  `json:"start"`
+		Limit uint32 `json:"limit"`
+		Order string `json:"order"`
+	}
+	if err := json.Unmarshal(params, &args); err != nil {
+		// try array format or ignore
+	}
+	if args.Limit == 0 {
+		args.Limit = 100
+	}
+	if args.Limit > 1000 {
+		args.Limit = 1000
+	}
+
+	posts, err := h.state.ListContent()
+	if err != nil {
+		return nil, &rpcError{Code: -32603, Message: err.Error()}
+	}
+
+	results := make([]state.PostData, 0)
+	if len(posts) == 0 {
+		fallback := state.PostData{
+			Author:            "hiveio",
+			Permlink:          "announcing-the-launch-of-hive-blockchain",
+			Category:          "blog",
+			Title:             "Announcing the Launch of Hive Blockchain",
+			Body:              "This is the official announcement post of the Hive blockchain. Welcome to Hive!",
+			JSONMetadata:      "{}",
+			Created:           "2020-03-20T00:00:00",
+		}
+		results = append(results, fallback)
+	} else {
+		for _, post := range posts {
+			results = append(results, post)
+			if len(results) >= int(args.Limit) {
+				break
+			}
+		}
+	}
+
+	return map[string]any{
+		"comments": results,
+	}, nil
+}
