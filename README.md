@@ -1,6 +1,6 @@
 # 🛸 Hoverfly
 
-**The modern, secure, and ultra-lightweight local Hive mock server. Built for 2026 and beyond.**
+**The modern, secure, and ultra-lightweight local Hive mock server. Built for production, made to last.**
 
 In nature, the **hoverfly** (_Syrphidae_) is the classic example of Batesian mimicry. It looks and behaves almost exactly like a stinging wasp or honey bee to deter predators, but it is completely harmless and stinger-free. Similarly, `hoverfly` mimics the JSON-RPC surface, network formats, transaction flow, and stateful responses of a real Hive node, offering a fast local testing sandbox without consensus overhead, P2P networking, or live mainnet side effects.
 
@@ -117,13 +117,13 @@ By default, Hoverfly binds to port `8090` (matching default Hive nodes). Change 
 
 ## ⚙️ CLI Reference
 
-| Flag      | Type     | Default | Description                                             |
-| --------- | -------- | ------- | ------------------------------------------------------- |
-| `--port`  | `int`    | `8090`  | Port to bind the HTTP JSON-RPC server                   |
-| `--db`    | `string` | `""`    | Directory path to BadgerDB. If empty, runs in-memory.   |
-| `--reset` | `bool`   | `false` | If true, deletes the BadgerDB directory before booting. |
-| `--debug` | `bool`   | `false` | Enables verbose request and state-change logging.       |
-| `--strict`| `bool`   | `false` | Runs server in strict mode, validating transaction state.|
+| Flag       | Type     | Default | Description                                               |
+| ---------- | -------- | ------- | --------------------------------------------------------- |
+| `--port`   | `int`    | `8090`  | Port to bind the HTTP JSON-RPC server                     |
+| `--db`     | `string` | `""`    | Directory path to BadgerDB. If empty, runs in-memory.     |
+| `--reset`  | `bool`   | `false` | If true, deletes the BadgerDB directory before booting.   |
+| `--debug`  | `bool`   | `false` | Enables verbose request and state-change logging.         |
+| `--strict` | `bool`   | `false` | Runs server in strict mode, validating transaction state. |
 
 ---
 
