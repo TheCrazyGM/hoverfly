@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/dgraph-io/badger/v4"
-	anthercrypto "github.com/srbde/anther/crypto"
+	anthercrypto "github.com/srbde/hive-anther/crypto"
 )
 
 type Manabar struct {

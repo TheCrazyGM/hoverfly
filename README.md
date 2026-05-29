@@ -61,7 +61,7 @@ No more dry, unreadable terminal logs. Hoverfly uses **[charmbracelet/log](https
 
 ### 🔌 Ecosystem Alignment
 
-Hoverfly is the local testing companion to **[Anther](https://github.com/srbde/anther)** (Go), **[Pollen](https://github.com/srbde/pollen)** (TypeScript), **[Xylem](https://github.com/srbde/xylem)** (Rust), and **[Nectar](https://github.com/srbde/hive-nectar)** (Python). Together, they form a unified, secure foundation for building cross-platform Hive applications under the **SRBDE** umbrella.
+Hoverfly is the local testing companion to **[Anther](https://github.com/srbde/hive-anther)** (Go), **[Pollen](https://github.com/srbde/hive-pollen)** (TypeScript), **[Xylem](https://github.com/srbde/hive-xylem)** (Rust), and **[Nectar](https://github.com/srbde/hive-nectar)** (Python). Together, they form a unified, secure foundation for building cross-platform Hive applications under the **SRBDE** umbrella.
 
 ---
 
@@ -159,8 +159,8 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/srbde/anther/client"
-	"github.com/srbde/anther/transaction"
+	"github.com/srbde/hive-anther/client"
+	"github.com/srbde/hive-anther/transaction"
 )
 
 func main() {
@@ -298,9 +298,9 @@ We apply the logic of agricultural sustainability to software: the goal is alway
 
 | Project                                               | Description                       |
 | ----------------------------------------------------- | --------------------------------- |
-| [Pollen](https://github.com/srbde/pollen)             | The modern Hive TypeScript SDK    |
-| [Anther](https://github.com/srbde/anther)             | The modern Hive Go SDK            |
-| [Xylem](https://github.com/srbde/xylem)               | The modern Hive Rust SDK          |
+| [Pollen](https://github.com/srbde/hive-pollen)             | The modern Hive TypeScript SDK    |
+| [Anther](https://github.com/srbde/hive-anther)             | The modern Hive Go SDK            |
+| [Xylem](https://github.com/srbde/hive-xylem)               | The modern Hive Rust SDK          |
 | [Nectar](https://github.com/srbde/hive-nectar)        | The modern Hive Python SDK        |
 | [nectarengine](https://github.com/srbde/nectarengine) | The Hive-Engine sidechain library |
 | [ecoinstats.net](https://ecoinstats.net)              | SRBDE corporate hub               |
